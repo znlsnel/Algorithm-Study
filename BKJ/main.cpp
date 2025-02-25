@@ -1,69 +1,143 @@
 ﻿using System;
-using System.Collections.Generic;
 
 public class Solution
 {
-        private const int MODULER = 10000019;
+        static int MOD = 1000000007;
+        static int[] dx = { 1, 0, -1, 0 };
+        static int[] dy = { 0, 1, 0, -1 };
 
-        public void CalculateCombination(long[, ] V, int Row)
+        public int solution(int[, ] grid, int[] d, int k)
         {
-                V[0, 0] = 1;
-                for (int i = 1; i <= Row; i++)
+                int n = grid.GetLength(0); // 행의 개수
+                int m = grid.GetLength(1); // 열의 개수
+                int dl = d.Length;
+
+                // dp[순서][출발칸][목적지칸]
+                long[][][] dp = new long[dl + 1][][];
+                for (int i = 0; i <= dl; i++)
                 {
-                        for (int j = 0; j <= Row; j++)
+                        dp[i] = new long[n * m][];
+                        for (int j = 0; j < n * m; j++)
                         {
-                                if (j == 0) V[i, j] = 1;
-                                else if (i == j) V[i, j] = 1;
-                                else V[i, j] = (V[i - 1, j - 1] + V[i - 1, j]) % MODULER;
+                                dp[i][j] = new long[n * m];
                         }
                 }
-        }
 
-        public void CalculateOneCnt(int[] V, int[, ] MAP)
-        {
-                int row = MAP.GetLength(0);
-                int col = MAP.GetLength(1);
-                for (int i = 0; i < row; i++)
+                // 초기화: 시작점에서 시작점으로 이동하는 경우
+                for (int i = 0; i < n * m; i++)
                 {
-                        for (int j = 0; j < col; j++)
-                        {
-                                V[j] += MAP[i, j];
-                        }
+                        dp[0][i][i] = 1;
                 }
-        }
 
-        public int solution(int[, ] a)
-        {
-                int Row = a.GetLength(0);
-                int Col = a.GetLength(1);
-
-                long[, ] nCr = new long[Row + 1, Row + 1];
-                CalculateCombination(nCr, Row);
-
-                int[] ArrOneCnt = new int[Col + 1];
-                CalculateOneCnt(ArrOneCnt, a);
-
-                long[, ] DP = new long[Col + 2, Row + 1];
-                DP[1, Row - ArrOneCnt[0]] = nCr[Row, Row - ArrOneCnt[0]];
-
-                for (int Column = 1; Column < Col; Column++)
+                // DP 배열 채우기
+                for (int l = 1; l <= dl; l++)
                 {
-                        int OneCnt = ArrOneCnt[Column];
-                        for (int EvenNum = 0; EvenNum <= Row; EvenNum++)
+                        for (int i = 0; i < n * m; i++)
                         {
-                                if (DP[Column, EvenNum] == 0) continue;
-                                for (int K = 0; K <= OneCnt; K++)
+                                int x = i % m; // 열
+                                int y = i / m; // 행
+
+                                for (int dir = 0; dir < 4; dir++)
                                 {
-                                        if (EvenNum < K) continue;
-                                        int BeEvenRow = EvenNum + OneCnt - (2 * K);
-                                        if (BeEvenRow > Row) continue;
+                                        int nx = x + dx[dir];
+                                        int ny = y + dy[dir];
 
-                                        long Result = (nCr[EvenNum, K] * nCr[Row - EvenNum, OneCnt - K]) % MODULER;
-                                        DP[Column + 1, BeEvenRow] = (DP[Column + 1, BeEvenRow] + DP[Column, EvenNum] * Result) % MODULER;
+                                        // 범위를 벗어나거나 높이 차이가 d[l-1]와 일치하지 않으면 스킵
+                                        if (nx < 0 || nx >= m || ny < 0 || ny >= n || grid[ny, nx] - grid[y, x] != d[l - 1])
+                                        {
+                                                continue;
+                                        }
+
+                                        // 이동 가능한 경우, 경로 수 업데이트
+                                        for (int j = 0; j < n * m; j++)
+                                        {
+                                                dp[l][j][ny * m + nx] += dp[l - 1][j][i] % MOD;
+                                                dp[l][j][ny * m + nx] %= MOD;
+                                        }
                                 }
                         }
                 }
 
-                return (int)DP[Col, Row];
+                // k를 2의 거듭제곱으로 분해하기 위해 필요한 최대 count 계산
+                int count = 0;
+                while (Math.Pow(2, count) < k)
+                {
+                        count++;
+                }
+
+                // edgePower[c]: dp[dl]를 2^c번 거듭제곱한 행렬
+                long[][][] edgePower = new long[count + 1][][];
+                for (int i = 0; i <= count; i++)
+                {
+                        edgePower[i] = new long[n * m][];
+                        for (int j = 0; j < n * m; j++)
+                        {
+                                edgePower[i][j] = new long[n * m];
+                        }
+                }
+
+                edgePower[0] = dp[dl]; // 초기값 설정
+                for (int c = 1; c <= count; c++)
+                {
+                        edgePower[c] = MulMatrix(edgePower[c - 1], edgePower[c - 1]);
+                }
+
+                // 단위 행렬 초기화
+                long[][] mat = new long[n * m][];
+                for (int i = 0; i < n * m; i++)
+                {
+                        mat[i] = new long[n * m];
+                        mat[i][i] = 1;
+                }
+
+                // k를 2의 거듭제곱으로 분해하여 행렬 곱셈 수행
+                int kNum = k;
+                while (kNum > 0)
+                {
+                        if (kNum >= Math.Pow(2, count))
+                        {
+                                mat = MulMatrix(mat, edgePower[count]);
+                                kNum -= (int)Math.Pow(2, count);
+                        }
+                        count--;
+                }
+
+                // 모든 경로의 수 합산
+                long answer = 0;
+                for (int i = 0; i < n * m; i++)
+                {
+                        for (int j = 0; j < n * m; j++)
+                        {
+                                answer += mat[i][j];
+                                answer %= MOD;
+                        }
+                }
+
+                return (int)answer;
+        }
+
+        // 행렬 곱셈 메서드
+        static long[][] MulMatrix(long[][] a, long[][] b)
+        {
+                int n = a.Length;
+                long[][] result = new long[n][];
+                for (int i = 0; i < n; i++)
+                {
+                        result[i] = new long[n];
+                }
+
+                for (int i = 0; i < n; i++)
+                {
+                        for (int j = 0; j < n; j++)
+                        {
+                                for (int l = 0; l < n; l++)
+                                {
+                                        result[i][j] += ((a[i][l] % MOD) * (b[l][j] % MOD)) % MOD;
+                                        result[i][j] %= MOD;
+                                }
+                        }
+                }
+
+                return result;
         }
 }
